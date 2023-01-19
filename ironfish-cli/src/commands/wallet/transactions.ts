@@ -52,16 +52,32 @@ export class TransactionsCommand extends IronfishCommand {
     })
 
     let showHeader = true
+    let rowNumber = 1
 
     for await (const transaction of response.contentStream()) {
-      const transactionRow = this.getTransactionRow(transaction)
+      const transactionHeader = this.getTransactionHeader(transaction, rowNumber++)
+
+      const transactionRows: TransactionRow[] = []
+      for (const { assetId, delta } of transaction.assetBalanceDeltas) {
+        if (assetId === Asset.nativeId().toString('hex')) {
+          continue
+        }
+
+        transactionRows.push({ assetId, amount: BigInt(delta) })
+      }
 
       CliUx.ux.table(
-        [transactionRow],
+        [transactionHeader, ...transactionRows],
         {
+          rowNumber: {
+            header: '#',
+            minWidth: 4,
+          },
           timestamp: {
             header: 'Timestamp',
-            get: (row) => TimeUtils.renderString(row.timestamp),
+            get: (row) => (row.timestamp ? TimeUtils.renderString(row.timestamp) : ''),
+            minWidth: 26,
+            extended: true,
           },
           status: {
             header: 'Status',
@@ -74,31 +90,39 @@ export class TransactionsCommand extends IronfishCommand {
           hash: {
             header: 'Hash',
           },
+          assetId: {
+            header: 'Asset ID',
+          },
           amount: {
-            header: 'Net Amount ($IRON)',
-            get: (row) => (row.amount > 0 ? CurrencyUtils.renderIron(row.amount) : ''),
+            header: 'Net Amount',
+            get: (row) => (row.amount !== 0n ? CurrencyUtils.renderIron(row.amount) : ''),
             minWidth: 20,
           },
           feePaid: {
             header: 'Fee Paid ($IRON)',
-            get: (row) => (row.feePaid > 0 ? CurrencyUtils.renderIron(row.feePaid) : ''),
+            get: (row) =>
+              row.feePaid && row.feePaid !== 0n ? CurrencyUtils.renderIron(row.feePaid) : '',
             minWidth: 20,
           },
           notesCount: {
             header: 'Notes',
             minWidth: 5,
+            extended: true,
           },
           spendsCount: {
             header: 'Spends',
             minWidth: 5,
+            extended: true,
           },
           mintsCount: {
             header: 'Mints',
             minWidth: 5,
+            extended: true,
           },
           burnsCount: {
             header: 'Burns',
             minWidth: 5,
+            extended: true,
           },
           expiration: {
             header: 'Expiration',
@@ -115,7 +139,10 @@ export class TransactionsCommand extends IronfishCommand {
     }
   }
 
-  getTransactionRow(transaction: GetAccountTransactionsResponse): TransactionRow {
+  getTransactionHeader(
+    transaction: GetAccountTransactionsResponse,
+    rowNumber?: number,
+  ): TransactionRow {
     const assetId = Asset.nativeId().toString('hex')
 
     const nativeAssetBalanceDelta = transaction.assetBalanceDeltas.find(
@@ -134,6 +161,8 @@ export class TransactionsCommand extends IronfishCommand {
 
     return {
       ...transaction,
+      rowNumber,
+      assetId,
       amount,
       feePaid,
     }
@@ -141,15 +170,17 @@ export class TransactionsCommand extends IronfishCommand {
 }
 
 type TransactionRow = {
-  timestamp: number
-  status: string
-  type: string
-  hash: string
+  rowNumber?: number
+  timestamp?: number
+  status?: string
+  type?: string
+  hash?: string
+  assetId: string
   amount: bigint
-  feePaid: bigint
-  notesCount: number
-  spendsCount: number
-  mintsCount: number
-  burnsCount: number
-  expiration: number
+  feePaid?: bigint
+  notesCount?: number
+  spendsCount?: number
+  mintsCount?: number
+  burnsCount?: number
+  expiration?: number
 }
